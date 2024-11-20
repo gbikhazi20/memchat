@@ -252,3 +252,66 @@ input {
   text-align: center;
   color: #666;
 }
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  background-color: rgb(40, 37, 53);
+}
+
+.message {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.sent {
+  flex-direction: row-reverse;
+  margin-left: auto;
+}
+
+.sent p {
+  color: white;
+  background: #0b93f6;
+  margin-right: 10px;
+}
+
+.received p {
+  background: #e5e5ea;
+  color: black;
+  margin-left: 10px;
+}
+
+.message p {
+  max-width: 500px;
+  margin-bottom: 12px;
+  line-height: 24px;
+  padding: 10px 20px;
+  border-radius: 25px;
+  position: relative;
+  text-align: left;
+  word-wrap: break-word;
+}
+
+.message img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin: 2px 5px;
+}

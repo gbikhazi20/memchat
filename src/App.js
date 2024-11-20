@@ -17,6 +17,7 @@ import {
   where,
   serverTimestamp,
   addDoc,
+  getDoc,
   getDocs,
   doc,
   setDoc,
@@ -97,53 +98,48 @@ function ChatContainer() {
   const [chatUsers, setChatUsers] = useState({});
 
   useEffect(() => {
-    // Fetch user's chats
     const fetchChats = async () => {
       const chatsRef = collection(firestore, "chats");
       const q = query(
         chatsRef,
         where("participants", "array-contains", auth.currentUser.uid)
       );
-      const querySnapshot = await getDocs(q);
-      const chatsList = querySnapshot.docs
-        .map((doc) => ({
+
+      try {
+        const querySnapshot = await getDocs(q);
+        const chatsList = querySnapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
-        }))
-        .sort((a, b) => {
-          // Sort by lastMessageAt, handling missing timestamps
-          const timeA = a.lastMessageAt?.seconds || 0;
-          const timeB = b.lastMessageAt?.seconds || 0;
-          return timeB - timeA;
+        }));
+
+        setChats(chatsList);
+
+        // Fetch all users involved in these chats
+        const userIds = new Set();
+        chatsList.forEach((chat) => {
+          chat.participants.forEach((userId) => userIds.add(userId));
         });
 
-      setChats(chatsList);
+        const usersData = {};
+        await Promise.all(
+          Array.from(userIds).map(async (userId) => {
+            const userDoc = doc(firestore, "users", userId);
+            const userSnap = await getDoc(userDoc);
+            if (userSnap.exists()) {
+              usersData[userId] = userSnap.data();
+            }
+          })
+        );
 
-      // Fetch all users involved in these chats
-      const userIds = new Set();
-      chatsList.forEach((chat) => {
-        chat.participants.forEach((userId) => userIds.add(userId));
-      });
-
-      const usersRef = collection(firestore, "users");
-      const userDocs = await Promise.all(
-        Array.from(userIds).map(async (userId) => {
-          const userQuery = query(usersRef, where("uid", "==", userId));
-          return getDocs(userQuery);
-        })
-      );
-
-      const usersMap = {};
-      userDocs.forEach((userDoc) => {
-        if (!userDoc.empty) {
-          const userData = userDoc.docs[0].data();
-          usersMap[userData.uid] = userData;
-        }
-      });
-      setChatUsers(usersMap);
+        setChatUsers(usersData);
+      } catch (error) {
+        console.error("Error fetching chats:", error);
+      }
     };
 
-    fetchChats();
+    if (auth.currentUser) {
+      fetchChats();
+    }
   }, []);
 
   return (
@@ -164,6 +160,75 @@ function ChatContainer() {
     </div>
   );
 }
+
+const MessageInput = React.memo(({ chatId }) => {
+  const [formValue, setFormValue] = useState("");
+
+  const sendMessage = async (e) => {
+    e.preventDefault();
+    if (!formValue.trim()) return;
+
+    const { uid, photoURL } = auth.currentUser;
+
+    try {
+      // Add message
+      await addDoc(collection(firestore, "messages"), {
+        text: formValue,
+        createdAt: serverTimestamp(),
+        uid,
+        chatId,
+        photoURL,
+      });
+
+      // Update chat's last message
+      const chatRef = doc(firestore, "chats", chatId);
+      await setDoc(
+        chatRef,
+        {
+          lastMessage: formValue,
+          lastMessageAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      setFormValue("");
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
+  };
+
+  return (
+    <form onSubmit={sendMessage}>
+      <input
+        value={formValue}
+        onChange={(e) => setFormValue(e.target.value)}
+        placeholder="Type a message..."
+      />
+      <button type="submit" disabled={!formValue.trim()}>
+        Send
+      </button>
+    </form>
+  );
+});
+
+const MessagesList = React.memo(({ messages, chatUsers, dummy }) => {
+  useEffect(() => {
+    dummy?.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, dummy]);
+
+  return (
+    <div className="messages">
+      {messages && messages.length > 0 ? (
+        messages.map((msg) => (
+          <ChatMessage key={msg.id} message={msg} user={chatUsers[msg.uid]} />
+        ))
+      ) : (
+        <div>No messages yet. Start the conversation!</div>
+      )}
+      <div ref={dummy}></div>
+    </div>
+  );
+});
 
 function ChatList({ chats, chatUsers, selectedChat, onSelectChat }) {
   const [searchEmail, setSearchEmail] = useState("");
@@ -199,6 +264,8 @@ function ChatList({ chats, chatUsers, selectedChat, onSelectChat }) {
     const existingChat = chats.find((chat) =>
       chat.participants.includes(otherUser.uid)
     );
+
+    console.log("existingChat", existingChat);
 
     if (existingChat) {
       onSelectChat(existingChat.id);
@@ -302,67 +369,32 @@ function ChatRoom({ chatId, chatUsers }) {
   );
 
   const [messages] = useCollectionData(messagesQuery, { idField: "id" });
-  const [formValue, setFormValue] = useState("");
-
-  const sendMessage = async (e) => {
-    e.preventDefault();
-
-    const { uid, photoURL } = auth.currentUser;
-
-    // Add message
-    await addDoc(messagesRef, {
-      text: formValue,
-      createdAt: serverTimestamp(),
-      uid,
-      chatId,
-      photoURL,
-    });
-
-    // Update chat's last message
-    const chatRef = doc(firestore, "chats", chatId);
-    await setDoc(
-      chatRef,
-      {
-        lastMessage: formValue,
-        lastMessageAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-
-    setFormValue("");
-  };
+  const dummy = useRef();
 
   return (
     <div className="chat-room">
-      <div className="messages">
-        {messages &&
-          messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} user={chatUsers[msg.uid]} />
-          ))}
-      </div>
-
-      <form onSubmit={sendMessage}>
-        <input
-          value={formValue}
-          onChange={(e) => setFormValue(e.target.value)}
-          placeholder="Type a message..."
-        />
-        <button type="submit">Send</button>
-      </form>
+      <MessagesList messages={messages} chatUsers={chatUsers} dummy={dummy} />
+      <MessageInput chatId={chatId} />
     </div>
   );
 }
 
-function ChatMessage({ message, user }) {
-  const { text, uid } = message;
+// Optimized ChatMessage Component
+const ChatMessage = React.memo(({ message, user }) => {
+  if (!message) return null;
+
+  const { text, uid, photoURL: messagePhotoURL } = message;
   const messageClass = uid === auth.currentUser.uid ? "sent" : "received";
 
   return (
     <div className={`message ${messageClass}`}>
-      <img src={user?.photoURL} alt={user?.displayName} />
+      <img
+        src={user?.photoURL || messagePhotoURL || "default-avatar-url"}
+        alt={user?.displayName || "User"}
+      />
       <p>{text}</p>
     </div>
   );
-}
+});
 
 export { App };
