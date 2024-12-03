@@ -127,6 +127,11 @@ form {
   color: black;
 }
 
+.bot p {
+  background: #eca8ff;
+  color: rgb(95, 0, 124);
+}
+
 p {
   max-width: 500px;
   margin-bottom: 12px;

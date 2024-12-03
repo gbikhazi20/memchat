@@ -17,6 +17,7 @@ import {
   where,
   serverTimestamp,
   addDoc,
+  deleteDoc,
   getDoc,
   getDocs,
   doc,
@@ -39,6 +40,8 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const firestore = getFirestore(firebaseApp);
+
+const bot_id = "Xup53jtonO9BXxMpW8uH";
 
 function App() {
   const [user] = useAuthState(auth);
@@ -161,6 +164,79 @@ function ChatContainer() {
   );
 }
 
+const MessageBar = React.memo(({ chatId, messages }) => {
+  const summarizeMessages = async () => {
+    const summary = messages
+      .filter((msg) => msg.uid !== bot_id)
+      .map((msg) => msg.text.split(" "))
+      .join(",");
+    const summary_text = "Summary: " + summary;
+
+    const bot_pic_url =
+      "https://img.icons8.com/?size=100&id=r9qA6fLGZtdf&format=png&color=000000";
+    const timestamp = serverTimestamp();
+
+    try {
+      await addDoc(collection(firestore, "messages"), {
+        text: summary_text,
+        createdAt: timestamp,
+        uid: bot_id,
+        chatId,
+        photoURL: bot_pic_url,
+      });
+      const chatRef = doc(firestore, "chats", chatId);
+      await setDoc(
+        chatRef,
+        {
+          lastMessage: summary_text,
+          lastMessageAt: timestamp,
+        },
+        { merge: true }
+      );
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
+  };
+
+  const clearBotMessages = async () => {
+    try {
+      // Query messages where chatId matches and uid matches
+      const messagesRef = collection(firestore, "messages");
+      const q = query(
+        messagesRef,
+        where("chatId", "==", chatId),
+        where("uid", "==", bot_id)
+      );
+
+      // Fetch the messages
+      const querySnapshot = await getDocs(q);
+
+      // Delete each message document
+      const deletePromises = querySnapshot.docs.map((docSnap) =>
+        deleteDoc(doc(firestore, "messages", docSnap.id))
+      );
+
+      // Wait for all deletions to complete
+      await Promise.all(deletePromises);
+
+      console.log(
+        `All messages from uid '${bot_id}' in chat '${chatId}' have been deleted.`
+      );
+    } catch (error) {
+      console.error("Error deleting messages:", error);
+    }
+  };
+
+
+  return (
+    <div className="message-bar">
+      <MessageInput chatId={chatId} />
+      <button onClick={summarizeMessages}>Summarize</button>
+      <button onClick={clearBotMessages}>Clear Bot Messages</button>
+    </div>
+  );
+});
+
 const MessageInput = React.memo(({ chatId }) => {
   const [formValue, setFormValue] = useState("");
 
@@ -277,7 +353,7 @@ function ChatList({ chats, chatUsers, selectedChat, onSelectChat }) {
     // Create new chat
     const chatsRef = collection(firestore, "chats");
     const newChat = await addDoc(chatsRef, {
-      participants: [auth.currentUser.uid, otherUser.uid],
+      participants: [auth.currentUser.uid, otherUser.uid, bot_id],
       createdAt: serverTimestamp(),
       lastMessageAt: serverTimestamp(),
     });
@@ -374,7 +450,7 @@ function ChatRoom({ chatId, chatUsers }) {
   return (
     <div className="chat-room">
       <MessagesList messages={messages} chatUsers={chatUsers} dummy={dummy} />
-      <MessageInput chatId={chatId} />
+      <MessageBar chatId={chatId} messages={messages} />
     </div>
   );
 }
@@ -384,7 +460,9 @@ const ChatMessage = React.memo(({ message, user }) => {
   if (!message) return null;
 
   const { text, uid, photoURL: messagePhotoURL } = message;
-  const messageClass = uid === auth.currentUser.uid ? "sent" : "received";
+  // const messageClass = uid === auth.currentUser.uid ? "sent" : "received";
+  const messageClass =
+    uid === auth.currentUser.uid ? "sent" : uid === bot_id ? "bot" : "received";
 
   return (
     <div className={`message ${messageClass}`}>
