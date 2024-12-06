@@ -206,6 +206,8 @@ async function promptModel(prompt) {
 
   const hfToken = process.env.HF_TOKEN;
 
+  console.log("hfToken", hfToken);
+
   const headers = {
     Authorization: `Bearer ${hfToken}`, // Replace with your actual token
     "Content-Type": "application/json",
