@@ -2,7 +2,7 @@
 const fetch = require("node-fetch");
 
 exports.handler = async function (event, context) {
-  const hfToken = process.env.REACT_APP_HF_TOKEN; // Access the secret Hugging Face token
+  const hfToken = process.env.HF_TOKEN; // Access the secret Hugging Face token
 
   if (!hfToken) {
     return {
