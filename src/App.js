@@ -204,7 +204,7 @@ async function promptModel(prompt) {
   const url =
     "https://jzyutjh6xvrcylwx.us-east-1.aws.endpoints.huggingface.cloud/v1/chat/completions";
 
-  const hfToken = process.env.HF_TOKEN;
+  const hfToken = process.env.REACT_APP_HF_TOKEN;
 
   console.log("hfToken", hfToken);
 
