@@ -164,13 +164,201 @@ function ChatContainer() {
   );
 }
 
-const MessageBar = React.memo(({ chatId, messages }) => {
+function formatPrompt(messages) {
+  const convertDateFormat = (dateString) => {
+    // Parse the input date string
+    const date = new Date(dateString);
+
+    if (isNaN(date)) {
+      throw new Error("Invalid date string");
+    }
+
+    // Format the date as YYYY-MM-DD HH:mm
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are zero-based
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  };
+
+  const getDateRange = (messages) => {
+    if (!messages.length) {
+      throw new Error("No messages provided.");
+    }
+
+    // Extract timestamps and convert them to Date objects
+    const dates = messages.map((msg) => new Date(msg.timestamp));
+
+    // Ensure all dates are valid
+    if (dates.some((date) => isNaN(date))) {
+      throw new Error("Invalid date in messages.");
+    }
+
+    // Find the earliest and latest dates
+    const earliestDate = new Date(Math.min(...dates));
+    const latestDate = new Date(Math.max(...dates));
+
+    return {
+      start_date: earliestDate.toISOString(),
+      end_date: latestDate.toISOString(),
+    };
+  };
+
+  const messagesText = messages
+    .map((msg) => `${msg.createdAt} | ${msg.text}`)
+    .join("\n");
+
+  // Get the date range
+  // const data = getDateRange(messages);
+  const start_date = "December 6, 2024";
+  const end_date = "December 6, 2024";
+
+  // Build the prompt
+  const prompt = `[INST] You are a chat summarization assistant. Given a conversation and its date range, create a concise yet helpful summary that captures the key points, emotional undertones, and progression of the relationship between participants.
+
+Please summarize the following chat conversation that occurred between ${start_date} and ${end_date}.
+
+[START DATE]
+${start_date}
+[END DATE]
+${end_date}
+[CHAT MESSAGES]
+${messagesText} [/INST]
+[SUMMARY]`;
+
+  return prompt;
+}
+
+// hit huggingface api
+async function promptModel2(prompt) {
+  const url =
+    "https://jzyutjh6xvrcylwx.us-east-1.aws.endpoints.huggingface.cloud/v1/chat/completions";
+
+  const headers = {
+    Authorization: "Bearer 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", // Replace with your actual token
+    "Content-Type": "application/json",
+  };
+
+  const body = JSON.stringify({
+    model: "tgi",
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    max_tokens: 150,
+    stream: false,
+  });
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: headers,
+      body: body,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const rawData = await response.text(); // Get the raw response text
+    console.log("Raw response:", rawData); // Log the raw data
+
+    const data = JSON.parse(rawData); // Then try to parse the JSON
+    console.log("No error, data:", data); // Handle the response
+  } catch (error) {
+    console.error("Error during fetch:", error);
+  }
+}
+
+async function promptModel(prompt) {
+  const url =
+    "https://jzyutjh6xvrcylwx.us-east-1.aws.endpoints.huggingface.cloud/v1/";
+
+  const headers = {
+    Authorization: "Bearer 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", // Replace with your actual token
+    "Content-Type": "application/json",
+  };
+
+  const body = JSON.stringify({
+    model: "tgi", // Ensure this is a valid model ID
+    messages: [
+      {
+        role: "user",
+        content: prompt,
+      },
+    ],
+    max_tokens: 150,
+    stream: false,
+  });
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: headers,
+      body: body,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! Status: ${response.status}`);
+    }
+
+    const rawData = await response.text(); // Get the raw response text
+    console.log("Raw response:", rawData); // Log the raw data
+
+    let parts = rawData.split("data: "); // Split based on 'data: '
+    parts = parts.filter((part) => part.trim() !== ""); // Filter out empty parts
+
+    console.log("parts:", parts); // Log the parts
+
+    let jsonObjects = [];
+
+    for (let i = 0; i < parts.length; i++) {
+      let part = parts[i].trim().replace(/\n+$/, ""); // Clean each part
+
+      try {
+        // Parse JSON for the current index and store it
+        let parsedObj = JSON.parse(part);
+        jsonObjects.push(parsedObj);
+        console.log(`JSON object ${i}:`, parsedObj);
+      } catch (error) {
+        // In case of a parsing error, log it
+        console.error(`Error parsing JSON for part ${i}:`, error);
+      }
+    }
+
+    //let jsonObjects = parts.map((part) => JSON.parse(part)); // Parse each part
+
+    // console.log("jsonObjects:", jsonObjects); // Log the JSON objects
+
+    let words = [];
+
+    jsonObjects.forEach((obj) => {
+      // Get content from delta
+      let content = obj.choices[0].delta.content;
+
+      // Split content into words and add them to the array
+      words.push(...content.split(/\s+/)); // Regex \s+ splits by any whitespace
+    });
+
+    console.log("words:", words.join(" ")); // Log the words
+    return words.join(" ");
+  } catch (error) {
+    console.error("Error during fetch:", error);
+  }
+}
+
+const MessageBar = React.memo(({ chatId, messages, chatUsers }) => {
   const summarizeMessages = async () => {
-    const summary = messages
-      .filter((msg) => msg.uid !== bot_id)
-      .map((msg) => msg.text.split(" "))
-      .join(",");
-    const summary_text = "Summary: " + summary;
+    // const getNameFromId = (uid) => chatUsers[uid]?.displayName || "Unknown";
+    const prompt = formatPrompt(messages);
+
+    const model_summary = await promptModel(prompt);
+
+    console.log("model summary" + model_summary);
 
     const bot_pic_url =
       "https://img.icons8.com/?size=100&id=r9qA6fLGZtdf&format=png&color=000000";
@@ -178,7 +366,7 @@ const MessageBar = React.memo(({ chatId, messages }) => {
 
     try {
       await addDoc(collection(firestore, "messages"), {
-        text: summary_text,
+        text: model_summary,
         createdAt: timestamp,
         uid: bot_id,
         chatId,
@@ -188,7 +376,7 @@ const MessageBar = React.memo(({ chatId, messages }) => {
       await setDoc(
         chatRef,
         {
-          lastMessage: summary_text,
+          lastMessage: model_summary,
           lastMessageAt: timestamp,
         },
         { merge: true }
@@ -226,7 +414,6 @@ const MessageBar = React.memo(({ chatId, messages }) => {
       console.error("Error deleting messages:", error);
     }
   };
-
 
   return (
     <div className="message-bar">
@@ -450,7 +637,7 @@ function ChatRoom({ chatId, chatUsers }) {
   return (
     <div className="chat-room">
       <MessagesList messages={messages} chatUsers={chatUsers} dummy={dummy} />
-      <MessageBar chatId={chatId} messages={messages} />
+      <MessageBar chatId={chatId} messages={messages} chatUsers={chatUsers} />
     </div>
   );
 }
