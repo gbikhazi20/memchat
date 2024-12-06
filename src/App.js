@@ -201,17 +201,7 @@ ${messagesText} [/INST]
 }
 
 async function promptModel(prompt) {
-  const url =
-    "https://jzyutjh6xvrcylwx.us-east-1.aws.endpoints.huggingface.cloud/v1/chat/completions";
-
-  const hfToken = process.env.REACT_APP_HF_TOKEN;
-
-  console.log("hfToken", hfToken);
-
-  const headers = {
-    Authorization: `Bearer ${hfToken}`, // Replace with your actual token
-    "Content-Type": "application/json",
-  };
+  const url = "/.netlify/functions/huggingface"; // URL to the Netlify function
 
   const body = JSON.stringify({
     model: "tgi", // Ensure this is a valid model ID
@@ -228,7 +218,9 @@ async function promptModel(prompt) {
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: headers,
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: body,
     });
 
@@ -236,11 +228,8 @@ async function promptModel(prompt) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
 
-    const rawData = await response.text(); // Get the raw response text
-    console.log("Raw response:", rawData); // Log the raw data
-
-    const data = JSON.parse(rawData); // Then try to parse the JSON
-    const text = data.choices[0].message.content;
+    const data = await response.json(); // Parse the JSON response
+    const text = data.choices[0].message.content; // Extract the model's response
 
     return text;
   } catch (error) {
