@@ -186,7 +186,7 @@ function formatPrompt(messages, chatUsers) {
 These messages are between ${getNameFromId(uniqueIds[0])} and ${getNameFromId(
     uniqueIds[1]
   )}. You are providing a summary for ${getNameFromId(auth.currentUser.uid)}.
-Respond as though you are speaking to them directly and reminding them of what has happened in the conversation. Focus on retelling the most important details.
+Remind them of what has happened in the conversation with the other person. Focus on retelling the most important details. Include dates if necessary.
 Please summarize the following chat conversation that occurred between ${start_date} and ${end_date}.
 
 [START DATE]
@@ -201,7 +201,30 @@ ${messagesText} [/INST]
 }
 
 async function promptModel(prompt) {
-  const url = "/.netlify/functions/huggingface"; // URL to the Netlify function
+  const url =
+    "https://jzyutjh6xvrcylwx.us-east-1.aws.endpoints.huggingface.cloud/v1/chat/completions";
+
+  const hfToken = "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";
+
+  // const get_token = async () => {
+  //   try {
+  //     const response = await fetch("/.netlify/functions/secret");
+  //     console.log("Response:", response);
+  //     const body = await response.json();
+  //     console.log("Body:", body);
+  //   } catch (error) {
+  //     console.error("Error fetching secret:", error);
+  //   }
+  // };
+
+  // const hfToken = await get_token();
+
+  console.log("hfToken", hfToken);
+
+  const headers = {
+    Authorization: `Bearer ${hfToken}`, // Replace with your actual token
+    "Content-Type": "application/json",
+  };
 
   const body = JSON.stringify({
     model: "tgi", // Ensure this is a valid model ID
@@ -218,9 +241,7 @@ async function promptModel(prompt) {
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: headers,
       body: body,
     });
 
@@ -228,8 +249,11 @@ async function promptModel(prompt) {
       throw new Error(`HTTP error! Status: ${response.status}`);
     }
 
-    const data = await response.json(); // Parse the JSON response
-    const text = data.choices[0].message.content; // Extract the model's response
+    const rawData = await response.text(); // Get the raw response text
+    console.log("Raw response:", rawData); // Log the raw data
+
+    const data = JSON.parse(rawData); // Then try to parse the JSON
+    const text = data.choices[0].message.content;
 
     return text;
   } catch (error) {
@@ -305,7 +329,7 @@ const MessageBar = React.memo(({ chatId, messages, chatUsers }) => {
   return (
     <div className="message-bar">
       <MessageInput chatId={chatId} />
-      <button onClick={summarizeMessages}>Summarize</button>
+      <button onClick={summarizeMessages}>Remind Me</button>
       <button onClick={clearBotMessages}>Clear Bot Messages</button>
     </div>
   );
